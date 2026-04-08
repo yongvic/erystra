@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  ADMIN
+  EDITOR
+}
+
+enum SocialProvider {
+  FACEBOOK
+  LINKEDIN
+  TWITTER
+  INSTAGRAM
+}
+
+enum PostStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  FAILED
+  CANCELLED
+}
+
+enum PublicationStatus {
+  QUEUED
+  PUBLISHED
+  FAILED
+  CANCELLED
+}
+
+enum ReportFormat {
+  PDF
+  EMAIL
+}
+
+enum ReportStatus {
+  PENDING
+  READY
+  FAILED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         UserRole @default(ADMIN)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  posts Post[]
+}
+
+model SocialAccount {
+  id                String         @id @default(cuid())
+  provider          SocialProvider
+  label             String
+  handle            String
+  externalAccountId String         @unique
+  accessToken       String?
+  refreshToken      String?
+  tokenExpiresAt    DateTime?
+  profileImageUrl   String?
+  metadata          Json?
+  isActive          Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  publications PostPublication[]
+  snapshots    AnalyticsSnapshot[]
+
+  @@index([provider, isActive])
+}
+
+model Post {
+  id           String     @id @default(cuid())
+  title        String
+  content      String     @db.Text
+  mediaUrl     String?
+  status       PostStatus @default(DRAFT)
+  scheduledFor DateTime?
+  publishedAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  authorId     String
+
+  author       User              @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  publications PostPublication[]
+
+  @@index([status, scheduledFor])
+  @@index([createdAt])
+}
+
+model PostPublication {
+  id              String            @id @default(cuid())
+  postId          String
+  socialAccountId String
+  status          PublicationStatus @default(QUEUED)
+  providerPostId  String?
+  errorMessage    String?
+  publishedAt     DateTime?
+  metrics         Json?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  post          Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, socialAccountId])
+  @@index([status, publishedAt])
+}
+
+model AnalyticsSnapshot {
+  id              String   @id @default(cuid())
+  socialAccountId String
+  capturedAt      DateTime
+  followersCount  Int      @default(0)
+  reach           Int      @default(0)
+  engagement      Int      @default(0)
+  impressions     Int      @default(0)
+  metadata        Json?
+
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([socialAccountId, capturedAt])
+  @@index([capturedAt])
+}
+
+model GeneratedReport {
+  id          String       @id @default(cuid())
+  format      ReportFormat
+  status      ReportStatus @default(PENDING)
+  periodStart DateTime
+  periodEnd   DateTime
+  recipient   String?
+  fileUrl     String?
+  summary     Json?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
